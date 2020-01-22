@@ -16,5 +16,10 @@
     - If the data doesn't fit into a single machine, you've got a big data problem
     - If the data fits into a single machine, but takes days/week/months to process, you've got a big compute problem
   - Real-time data processing is another solid case (Velocity)
-  - 
+  - The 4 Vs of Big Data:
+    - Volume
+    - Velocity
+    - Variety
+    - Veracity
+  
 
