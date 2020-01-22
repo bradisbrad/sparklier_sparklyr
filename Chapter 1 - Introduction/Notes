@@ -1,0 +1,20 @@
+- Hadoop was technically built by Yahoo as an open source project, but the idea came from Google to handle data across multiple machines and files
+  - Mostly useful, originally, for MapReduce type operations
+  - Hive was released by Facebook in an effort to make life easeier on people doing these actions by adding SQL support to Hadoop
+  
+- Spark began as a research project at UC Berkeley to improve on MapReduce
+  - While Hadoop was on-disk, Spark uses mainly in-memory data, but supports on-disk as well
+  - Logistic regression runs 10 times faster on Spark than hadoop
+  - Hadoop's record for sorting is 100 TB in 72 minutes and 2100 nodes (computers)
+    - Spark's record is 100 TB in 23 minutes with 206 nodes
+  - Spark was released as an open source project in 2010
+  
+- Good use cases for Spark include anything that requires multiple machines
+  - Data that is too large to reside on one machine
+  - Processing that would benefit from being done on multiple machines
+  - "Big data often requires big compute, but big compute does not necessarily require big data"
+    - If the data doesn't fit into a single machine, you've got a big data problem
+    - If the data fits into a single machine, but takes days/week/months to process, you've got a big compute problem
+  - Real-time data processing is another solid case (Velocity)
+  - 
+
