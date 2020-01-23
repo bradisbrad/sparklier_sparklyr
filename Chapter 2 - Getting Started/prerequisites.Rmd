@@ -1,0 +1,173 @@
+---
+title: "Prerequisites"
+author: "Brad Hill"
+date: "1/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting Up
+
+**Check to ensure Java is already installed**
+
+```{r echo = F}
+system("java -version")
+```
+  
+**Install and load sparklyr**
+
+```{r}
+#install.packages("sparklyr")
+library(sparklyr)
+```
+
+**Install Spark locally (version 2.3 to coincide with book examples)**
+
+```{r eval = F}
+spark_install("2.3")
+```
+
+Important to remember, we're installing and connecting to a local cluster. This is useful for testing, but overall not super useful for the big data or big compute analysis.  
+  
+## Connecting    
+   
+**Connecting to our local cluster**
+```{r}
+sc <- spark_connect(master = "local", version = "2.3")
+```
+
+The `master` parameter indicates the main machine (or driver node) from the Spark cluster, while `version` is pretty self explanatory.   
+  
+## The imminent mtcars set   
+  
+**Copying data into Spark**
+```{r}
+cars <- copy_to(dest = sc, df = mtcars)
+cars
+```
+  
+Now, to access our copy in the Spark cluster, we just use `cars`. The `dest` parameter is going to be our Spark cluster, while `df` is the dataset to load into Spark.  
+
+We can take a look at jobs, storage, environment, and executors easily in the Spark web interface, which can be accessed like so:     
+```{r eval = F}
+spark_web(sc)
+```
+ 
+## [Analysis - First Look](https://therinspark.com/starting.html#starting-analysis)   
+  
+Evidently, we can just use `dplyr` verbs to interface with Spark, so we're going to do that. We can also use SQL, so if we wanted to, we could load in `DBI` and deal with that, but if I can use `dplyr`, why bother?  
+  
+```{r}
+library(tidyverse)
+count(cars)
+```
+
+An easy way to count records. Let's use dplyr for a little more, though.  
+
+```{r}
+cars %>% 
+  select(hp, mpg) %>% 
+  sample_n(100) %>% 
+  ggplot(aes(hp, mpg)) +
+  geom_point() +
+  theme_bw() +
+  labs(x = 'Horsepower', y = 'Miles per gallon', title = 'Vehicle Efficiency', subtitle = 'Miles per gallon vs horsepower')
+```
+
+We can use `collect()` to pull in all 100 of those sampled observations into our local machine, but there's not a huge reason to do that, as plotting works just fine whether you do or not.  
+
+## [Modeling - First Look](https://therinspark.com/starting.html#starting-modeling)   
+  
+Different verbs are used to throw models over to Spark. For instance, this would locally just be `lm()`, but due to it being in Spark, it is `ml_linear_regression()`. Wordier, but also more informative. Luckily, because of the way it's built, you *can* pipe into them, though. They also accept formula format. You can run `lm()` on this Spark data, but I assume it's going to lose the benefit of Spark in that case. For `cars`, at least, the coefficients are the same.
+  
+```{r}
+model <- ml_linear_regression(cars, mpg ~ hp)
+model
+```
+
+This book throws the new fake horsepower data into Spark inline in the prediction call, but I'm going to break those out.   
+  
+```{r}
+fake_hp <- copy_to(sc, data.frame(hp = 250 + 10 * 1:10))
+
+model %>% 
+  ml_predict(fake_hp) %>% 
+  rename(mpg = prediction) %>% 
+  mutate(series = 'Prediction') %>% 
+  full_join(select(cars, hp, mpg) %>% mutate(series = 'Original')) %>% 
+  ggplot(aes(hp, mpg, color = series)) +
+  geom_point() +
+  theme_bw()
+```
+
+## Data Import/Export   
+  
+It's easy enough to write from and read to Spark.  
+
+```{r}
+spark_write_csv(cars, 'cars.csv')
+cars <- spark_read_csv(sc, "cars.csv")
+```
+
+I'll be real honest, though. The "CSV" that it wrote is, in reality, a folder with a CSV and some other stuff in it. I don't know what all that is, but I don't think it matters. It figured it out when reading it in, and I assume that reading in a normal CSV would work just fine.   
+  
+## Extensions  
+  
+There are extensions to go with Spark. One instance is an extension to handle nested data, like jsons or nested dataframes. I've never seen this `collect_list` function, but *whatever*. The `nest` function doesn't work with Spark tables, so it is what it is.
+  
+```{r}
+pacman::p_load(sparklyr.nested)
+sdf_nest(cars, hp) %>% 
+  group_by(cyl) %>% 
+  summarize(data = collect_list(data))
+```
+
+## Distributed R  
+  
+You can distribute R across Spark clusters if Spark's functionality is insufficient, but the book says not to do it too often. I'll be the judge of that, but here's an example.  
+  
+```{r}
+cars %>% 
+  spark_apply(~round(.x))
+```
+
+This just rounds everything in the cars dataset.  
+  
+## Streaming Data
+  
+The other huge use case for Spark is the ability to stream data continuously.   
+  
+Start by creating an input folder.  
+  
+```{r}
+dir.create("input")
+write.csv(mtcars, "input/cars_1.csv", row.names = F)
+```
+  
+Follow up by defining a stream that processes incoming data from the input folder, does some stuff, and pushes output to an output folder.  
+  
+```{r}
+stream <- stream_read_csv(sc, "input/") %>% 
+  select(mpg, cyl, disp) %>% 
+  stream_write_csv("output/")
+```
+
+Fellas, we caught us one!  
+```{r}
+dir("output", pattern = ".csv")
+```
+
+What's neat is that adding new data to the input folder immediately processes and pushes a new file to output.   
+  
+```{r}
+write.csv(mtcars, "input/cars_2.csv", row.names = F)
+```
+
+And then, voila!  
+```{r}
+dir("output", pattern = ".csv")
+```
+
